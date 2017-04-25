@@ -37,7 +37,7 @@ def parse():
     parser.add_argument('--ipv6', help='adds IPv6, optional', required=False)
     parser.add_argument('--ipv4', help='adds IPv4, mandatory when you create a record', required=False)
     parser.add_argument('--username', help='infoblox username', required=True)
-    parser.add_argument('--server', default='infoblox.win.dante.org.uk', help='infoblox server')
+    parser.add_argument('--server', default='infoblox.foor.bar.com', help='infoblox server')
     parser.add_argument('--destroy', help='destroy record', action='store_true')
 
     return parser.parse_args()
