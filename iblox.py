@@ -7,14 +7,31 @@
     - add External/Internal view for Infoblox (now we've hardcoded External)
 """
 import os
-import getpass
 import argparse
 import textwrap
+import platform
+import ConfigParser
 from datetime import datetime
 from infoblox_client import connector
 from infoblox_client import objects
 import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
+
+
+OS = platform.system()
+if OS == 'Windows':
+    IBLOX_CONF = os.path.join(os.path.expanduser('~'), 'iblox.cfg')
+else:
+    IBLOX_CONF = os.path.join(os.path.expanduser('~'), '.ibloxrc')
+
+IBLOX_CONF_CONTENT = """[iblox]\n
+# Infoblox server <string>: infblox server fqdn
+iblox_server = infoblox.foo.bar.com\n
+# Infoblox username <string>: your_username
+iblox_username = your_username\n
+# Infoblox password <string>: your_password
+iblox_password = your_secret_pass_here\n
+"""
 
 
 def parse():
@@ -23,9 +40,10 @@ def parse():
     intro = """\
          With this script you can add/destroy A and AAAA record on Infoblox
          ------------------------------------------------------------------
-           Usage Add: iblox.py --host foo.bar.com --ipv4 192.168.0.10 --ipv6 2a00:1450:4009:810::2009 --username massimiliano.adamo
-           Usage Remove: iblox.py --host foo.bar.com --username massimiliano.adamo --destroy
-           - If you add, you will implicitly replace any existing entry which is different form the one provided to the script
+         Adding: iblox.py --host foo.bar.com --ipv4 192.168.0.10 --ipv6 2a00:1450:4009:810::2009
+         Removing: iblox.py --host foo.bar.com --username massimiliano.adamo --destroy
+         Hint: If you add a record, you will implicitly replace any existing entry which is
+               different from the one provided to the script
          """
     parser = argparse.ArgumentParser(
         formatter_class=lambda prog:
@@ -34,10 +52,8 @@ def parse():
         epilog="Author: Massimiliano Adamo <massimiliano.adamo@geant.org>")
 
     parser.add_argument('--host', help='host name', required=True)
-    parser.add_argument('--ipv6', help='adds IPv6, optional', required=False)
-    parser.add_argument('--ipv4', help='adds IPv4, mandatory when you create a record', required=False)
-    parser.add_argument('--username', help='infoblox username', required=True)
-    parser.add_argument('--server', default='infoblox.foor.bar.com', help='infoblox server')
+    parser.add_argument('--ipv6', help='IPv6, optional', required=False)
+    parser.add_argument('--ipv4', help='IPv4, mandatory when you create a record', required=False)
     parser.add_argument('--destroy', help='destroy record', action='store_true')
 
     return parser.parse_args()
@@ -50,16 +66,17 @@ def byebye(status=0):
 
 class Iblox(object):
     """manage infoblox entries"""
-    def __init__(self, username, password, server, record, ipv4, ipv6=None):
-        self.username = username
-        self.server = server
+    config = ConfigParser.RawConfigParser()
+
+    def __init__(self, record, ipv4, ipv6=None):
         self.record = record
         self.ipv4 = ipv4
         self.ipv6 = ipv6
+        self.config.readfp(open(IBLOX_CONF))
         self.opts = {
-            'host': server,
-            'username': username,
-            'password': password
+            'host': self.config.get('iblox', 'iblox_server'),
+            'username': self.config.get('iblox', 'iblox_username'),
+            'password': self.config.get('iblox', 'iblox_password')
             }
         self.conn = connector.Connector(self.opts)
 
@@ -189,6 +206,14 @@ if __name__ == '__main__':
     requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
     START_TIME = datetime.now()
 
+    if not os.access(IBLOX_CONF, os.W_OK):
+        CONF_FILE = open(IBLOX_CONF, 'w+')
+        CONF_FILE.write(IBLOX_CONF_CONTENT)
+        CONF_FILE.close()
+        print "\nThe following file has been created: {0}\n".format(IBLOX_CONF)
+        print "Fill it with proper values and run the script again\n"
+        byebye(1)
+
     ARGS = parse()
 
     if not ARGS.destroy:
@@ -197,26 +222,21 @@ if __name__ == '__main__':
             print "  You can use --help to check the options"
             os.sys.exit()
         else:
-            ipv4 = ARGS.ipv4
+            IPV4 = ARGS.ipv4
     else:
         if not ARGS.ipv4:
-            ipv4 = 'blah'
-
-    PASSWD = getpass.getpass(prompt='Your Infoblox password: ')
-
+            IPV4 = 'blah'
 
     if ARGS.ipv6:
         if ARGS.destroy:
-            Iblox(ARGS.username, PASSWD, ARGS.server, ARGS.host,
-                  ipv4, ARGS.ipv6).destroy()
+            Iblox(ARGS.host, IPV4, ARGS.ipv6).destroy()
         else:
-            Iblox(ARGS.username, PASSWD, ARGS.server, ARGS.host,
-                  ipv4, ARGS.ipv6).rebuild()
+            Iblox(ARGS.host, IPV4, ARGS.ipv6).rebuild()
     else:
         if ARGS.destroy:
-            Iblox(ARGS.username, PASSWD, ARGS.server, ARGS.host, ipv4).destroy()
+            Iblox(ARGS.host, IPV4).destroy()
         else:
-            Iblox(ARGS.username, PASSWD, ARGS.server, ARGS.host, ipv4).rebuild()
+            Iblox(ARGS.host, IPV4).rebuild()
 
     SPENT = (datetime.now() - START_TIME).seconds
     print "======== Script processed in {} seconds ========\n".format(SPENT)
