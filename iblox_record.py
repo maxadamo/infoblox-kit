@@ -38,7 +38,7 @@ def parse():
 
     intro = """\
         With this script you can add/replace/destroy A and AAAA record on Infoblox
-        --------------------------------------------------------------------------------
+        --------------------------------------------------------------------------
         Adding: iblox.py --host foo.bar.com --ipv4 192.168.0.10 --ipv6 2a00:1450:4009:810::2009
         Removing: iblox.py --host foo.bar.com --destroy
         Hint: If you add a record, you will implicitly replace any existing entry which is
@@ -197,11 +197,11 @@ class Iblox(object):
             else:
                 print "AAAA Record {} with IPv6 {} was already there".format(self.record, self.ipv6)
 
-        print '='*80
+        print '-'*74
 
 
 if __name__ == '__main__':
-    print '='*80
+    print '-'*74
     requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
     if not os.access(IBLOX_CONF, os.W_OK):
