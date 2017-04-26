@@ -11,7 +11,6 @@ import argparse
 import textwrap
 import platform
 import ConfigParser
-from datetime import datetime
 from infoblox_client import connector
 from infoblox_client import objects
 import requests
@@ -22,7 +21,7 @@ OS = platform.system()
 if OS == 'Windows':
     IBLOX_CONF = os.path.join(os.path.expanduser('~'), 'iblox.cfg')
 else:
-    IBLOX_CONF = os.path.join(os.path.expanduser('~'), '.ibloxrc')
+    IBLOX_CONF = os.path.join(os.environ['HOME'], '.ibloxrc')
 
 IBLOX_CONF_CONTENT = """[iblox]\n
 # Infoblox server <string>: infblox server fqdn
@@ -38,12 +37,12 @@ def parse():
     """ parse arguments """
 
     intro = """\
-         With this script you can add/destroy A and AAAA record on Infoblox
-         ------------------------------------------------------------------
-         Adding: iblox.py --host foo.bar.com --ipv4 192.168.0.10 --ipv6 2a00:1450:4009:810::2009
-         Removing: iblox.py --host foo.bar.com --username massimiliano.adamo --destroy
-         Hint: If you add a record, you will implicitly replace any existing entry which is
-               different from the one provided to the script
+        With this script you can add/replace/destroy A and AAAA record on Infoblox
+        --------------------------------------------------------------------------------
+        Adding: iblox.py --host foo.bar.com --ipv4 192.168.0.10 --ipv6 2a00:1450:4009:810::2009
+        Removing: iblox.py --host foo.bar.com --destroy
+        Hint: If you add a record, you will implicitly replace any existing entry which is
+              different from the one provided to the script
          """
     parser = argparse.ArgumentParser(
         formatter_class=lambda prog:
@@ -60,7 +59,7 @@ def parse():
 
 
 def byebye(status=0):
-    """ remove main.tf and say good bye """
+    """ say good bye """
     os.sys.exit(status)
 
 
@@ -204,7 +203,6 @@ class Iblox(object):
 if __name__ == '__main__':
     print '='*80
     requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-    START_TIME = datetime.now()
 
     if not os.access(IBLOX_CONF, os.W_OK):
         CONF_FILE = open(IBLOX_CONF, 'w+')
@@ -238,6 +236,4 @@ if __name__ == '__main__':
         else:
             Iblox(ARGS.host, IPV4).rebuild()
 
-    SPENT = (datetime.now() - START_TIME).seconds
-    print "======== Script processed in {} seconds ========\n".format(SPENT)
     byebye()
