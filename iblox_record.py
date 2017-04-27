@@ -114,6 +114,21 @@ class Iblox(object):
             else:
                 return aaaa_rec
 
+    def query_ptr4(self):
+        """ query for PTR4 record: return None if it does not exist or
+            if self.ptr matches the existing one """
+        reverse_ipv4 = "{}.in-addr.arpa".format(('.').join(list(reversed(self.ipv4.split('.')))))
+        try:
+            ptr4_rec = self.conn.get_object('record:ptr', {'name': reverse_ipv4})[0]
+        except TypeError:
+            return None
+        else:
+            if self.record == str(ptr4_rec['ptrdname']):
+                return 'already_there'
+            else:
+                return ptr4_rec
+
+
     def destroy(self):
         """ clean up host entries """
         host_entry = self.query_host()
@@ -137,11 +152,21 @@ class Iblox(object):
         else:
             print "destroyed AAAA Record {}".format(self.record)
 
+        try:
+            self.conn.delete_object(self.conn.get_object(
+                'record:ptr', {'ptrdname': self.record})[0]['_ref'])
+        except TypeError:
+            pass
+        else:
+            print "destroyed PTR Record for {}".format(self.record)
+
+
     def destroy_conditional(self):
         """ clean up host entries """
         host_entry = self.query_host()
         a_entry = self.query_a()
         aaaa_entry = self.query_aaaa()
+        ptr4_entry = self.query_ptr4()
 
         if host_entry:
             self.conn.delete_object(host_entry['_ref'])
@@ -154,6 +179,9 @@ class Iblox(object):
             self.conn.delete_object(aaaa_entry['_ref'])
             print "destroyed AAAA record {} with IPv6 {}".format(
                 self.record, self.ipv6)
+        if ptr4_entry and ptr4_entry != 'already_there':
+            self.conn.delete_object(ptr4_entry['_ref'])
+            print "destroyed PTR record {}".format(self.ipv4)
 
     def rebuild(self):
         """ - destroy host record (always)
@@ -164,10 +192,12 @@ class Iblox(object):
         self.destroy_conditional()
         a_entry = self.query_a()
         aaaa_entry = self.query_aaaa()
+        ptr4_entry = self.query_ptr4()
 
         if a_entry != 'already_there':
             try:
                 objects.ARecord.create(self.conn, view='External',
+                                       update_if_exists=True,
                                        name=self.record, ip=self.ipv4)
             except Exception as err:
                 print "couldn't create A Record for {} with IP {}: {}".format(
@@ -177,7 +207,7 @@ class Iblox(object):
                 print "created A Record {} with IP {}".format(
                     self.record, self.ipv4)
         else:
-            print "A Record {} with IPv4 {} was already there".format(
+            print "A Record {} with IPv4 {} is already there".format(
                 self.record, self.ipv4)
 
         if not self.ipv6:
@@ -195,7 +225,24 @@ class Iblox(object):
                     print "created AAAA Record {} with IP {}".format(
                         self.record, self.ipv6)
             else:
-                print "AAAA Record {} with IPv6 {} was already there".format(self.record, self.ipv6)
+                print "AAAA Record {} with IPv6 {} is already there".format(self.record, self.ipv6)
+
+        if ptr4_entry != 'already_there':
+            try:
+                objects.PtrRecordV4.create(self.conn, view='External',
+                                           update_if_exists=True, ip=self.ipv4,
+                                           ptrdname=self.record)
+            except Exception as err:
+                print "couldn't create PTR Record {} for host {}: {}".format(
+                    self.ipv4, self.record, err)
+                byebye(1)
+            else:
+                print "created PTR Record {} for host {}".format(
+                    self.ipv4, self.record)
+        else:
+            print "PTR Record {} for host {} is already there".format(
+                self.ipv4, self.record)
+
 
         print '-'*74
 
@@ -224,6 +271,8 @@ if __name__ == '__main__':
     else:
         if not ARGS.ipv4:
             IPV4 = 'blah'
+        else:
+            IPV4 = ARGS.ipv4
 
     if ARGS.ipv6:
         if ARGS.destroy:

@@ -5,3 +5,7 @@
 - `iblox_txt.py` allows creation/change/deletion of TXT records (NOT WORKING!)
 
 Use the scripts with `-h/--help` (`iblox.py --help`) to see all available options
+
+## TODO
+
+- IPv6 PTR
