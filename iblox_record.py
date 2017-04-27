@@ -216,8 +216,8 @@ if __name__ == '__main__':
 
     if not ARGS.destroy:
         if not ARGS.ipv4:
-            print "  --ipv4 is mandatory when you create a new record"
-            print "  You can use --help to check the options"
+            print " --ipv4 is mandatory when you create a new record"
+            print " You can use --help to check the options"
             os.sys.exit()
         else:
             IPV4 = ARGS.ipv4

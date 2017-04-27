@@ -17,8 +17,7 @@ import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
 
-OS = platform.system()
-if OS == 'Windows':
+if platform.system() == 'Windows':
     IBLOX_CONF = os.path.join(os.path.expanduser('~'), 'iblox.cfg')
 else:
     IBLOX_CONF = os.path.join(os.environ['HOME'], '.ibloxrc')
@@ -37,8 +36,8 @@ def parse():
     """ parse arguments """
 
     intro = """\
-        With this script you can add/replace/destroy A and AAAA record on Infoblox
-        --------------------------------------------------------------------------
+        With this script you can add/replace/destroy a CNAME record on Infoblox
+        -----------------------------------------------------------------------
         Adding: iblox.py --host test-foo01.bar.com --alias foo.bar.com
         Removing: iblox.py --alias foo.bar.com --destroy
         Hint: If you add an alias, you will implicitly replace any existing entry which is
@@ -50,16 +49,11 @@ def parse():
         description=textwrap.dedent(intro),
         epilog="Author: Massimiliano Adamo <massimiliano.adamo@geant.org>")
 
-    parser.add_argument('--host', help='existing host name, mandatory when you create an alias', required=False)
-    parser.add_argument('--alias', help='alias to create, mandatory', required=True)
+    parser.add_argument('--host', help='existing host name. Mandatory when creating an alias')
+    parser.add_argument('--alias', help='alias to create. Mandatory', required=True)
     parser.add_argument('--destroy', help='destroy alias', action='store_true')
 
     return parser.parse_args()
-
-
-def byebye(status=0):
-    """ say good bye """
-    os.sys.exit(status)
 
 
 class Iblox(object):
@@ -68,7 +62,7 @@ class Iblox(object):
 
     def __init__(self, record, alias):
         self.record = record
-        self.cname = cname
+        self.alias = alias
         self.config.readfp(open(IBLOX_CONF))
         self.opts = {
             'host': self.config.get('iblox', 'iblox_server'),
@@ -79,51 +73,60 @@ class Iblox(object):
 
     def query_alias(self):
         """ query for CNAME record: return None if it does not exist or
-            if self.ipv4 matches the existing one """
+            if self.alias matches the existing one """
         try:
-            cname_rec = self.conn.get_object('record:cname', {'name': self.alias})[0]
+            alias_rec = self.conn.get_object('record:cname', {'name': self.alias})[0]
         except TypeError:
             return None
         else:
-            if self.record == str(cname_rec['canonical']):
+            if self.record == str(alias_rec['canonical']):
                 return 'already_there'
             else:
-                return cname_rec
+                return alias_rec
+
+    def destroy(self):
+        """ clean up CNAME entry """
+        try:
+            self.conn.delete_object(self.conn.get_object(
+                'record:cname', {'name': self.alias})[0]['_ref'])
+        except TypeError:
+            print "cound not find CNAME {}".format(self.alias)
+        else:
+            print "destroyed CNAME {}".format(self.alias)
 
     def destroy_conditional(self):
         """ clean up host entries """
-        cname_entry = self.query_alias()
-        if cname_entry and cname_entry != 'already_there':
-            self.conn.delete_object(cname_entry['_ref'])
+        alias_entry = self.query_alias()
+        if alias_entry and alias_entry != 'already_there':
+            self.conn.delete_object(alias_entry['_ref'])
             print "destroyed CNAME record {}".format(self.alias)
             return 'did something'
-        elif cname_entry == 'already_there':
+        elif alias_entry == 'already_there':
             return 'already_there'
         else:
             return None
 
     def rebuild(self):
-        """ - destroy alias record (if it is not matchinh)
+        """ - destroy alias record (if it is not matching)
             - create a new alias record if there isn't one already
         """
 
         try_destroy = self.destroy_conditional()
 
-        if try_destroy and try_destroy != 'already_there':
+        if try_destroy == 'already_there':
+            print "A CNAME {} associated to {} is already there".format(
+                self.alias, self.record)
+        else:
             try:
-                # create alias
-                objects.ARecord.create(self.conn, view='External',
-                                       name=self.record, ip=self.ipv4)
+                objects.CNAMERecord.create(self.conn, view='External',
+                                           name=self.alias, canonical=self.record)
             except Exception as err:
                 print "couldn't create CNAME {} to Record {}: {}".format(
                     self.alias, self.record, err)
-                byebye(1)
+                os.sys.exit(1)
             else:
-                print "created A Record {} with IP {}".format(
-                    self.record, self.ipv4)
-        else:
-            print "A Record {} with IPv4 {} was already there".format(
-                self.record, self.ipv4)
+                print "created CNAME record {} associated to {}".format(
+                    self.alias, self.record)
 
         print '-'*74
 
@@ -138,30 +141,24 @@ if __name__ == '__main__':
         CONF_FILE.close()
         print "\nThe following file has been created: {0}\n".format(IBLOX_CONF)
         print "Fill it with proper values and run the script again\n"
-        byebye(1)
+        os.sys.exit(1)
 
     ARGS = parse()
 
     if not ARGS.destroy:
         if not ARGS.host:
-            print "  --host is mandatory when you create a new record"
-            print "  You can use --help to check the options"
+            print " --host is mandatory when you create a new record"
+            print " You can use --help to check the options"
             os.sys.exit()
         else:
             HOST = ARGS.host
     else:
-        if not ARGS.ipv4:
-            IPV4 = 'blah'
+        if not ARGS.host:
+            HOST = 'blah'
 
-    if ARGS.ipv6:
-        if ARGS.destroy:
-            Iblox(ARGS.host, IPV4, ARGS.ipv6).destroy()
-        else:
-            Iblox(ARGS.host, IPV4, ARGS.ipv6).rebuild()
+    if ARGS.destroy:
+        Iblox(HOST, ARGS.alias).destroy()
     else:
-        if ARGS.destroy:
-            Iblox(ARGS.host, IPV4).destroy()
-        else:
-            Iblox(ARGS.host, IPV4).rebuild()
+        Iblox(HOST, ARGS.alias).rebuild()
 
-    byebye()
+    os.sys.exit()
