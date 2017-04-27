@@ -1,6 +1,7 @@
 #!/usr/bin/python
 #
 """
+  NOTE: THIS IS STILL BROKEN
   esoteric requirements:
     - infoblox-client (installable through pip)
   TODO:
@@ -16,6 +17,9 @@ from infoblox_client import objects
 import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
+# since the script is broken let's print a message and say good bye
+print "this script is still not working"
+os.sys.exit()
 
 if platform.system() == 'Windows':
     IBLOX_CONF = os.path.join(os.path.expanduser('~'), 'iblox.cfg')
@@ -38,9 +42,9 @@ def parse():
     intro = """\
         With this script you can add/replace/destroy a CNAME record on Infoblox
         -----------------------------------------------------------------------
-        Adding: iblox.py --host test-foo01.bar.com --alias foo.bar.com
-        Removing: iblox.py --alias foo.bar.com --destroy
-        Hint: If you add an alias, you will implicitly replace any existing entry which is
+        Adding: iblox.py --host test-foo01.bar.com --txt "txt string here"
+        Removing: iblox.py --txt foo.bar.com --destroy
+        Hint: If you add a txt, you will implicitly replace any existing entry which is
               different from the one provided to the script
          """
     parser = argparse.ArgumentParser(
@@ -49,9 +53,9 @@ def parse():
         description=textwrap.dedent(intro),
         epilog="Author: Massimiliano Adamo <massimiliano.adamo@geant.org>")
 
-    parser.add_argument('--host', help='existing host name. Mandatory when creating an alias')
-    parser.add_argument('--alias', help='alias to create. Mandatory', required=True)
-    parser.add_argument('--destroy', help='destroy alias', action='store_true')
+    parser.add_argument('--host', help='existing host name. Mandatory when creating a txt')
+    parser.add_argument('--txt', help='txt to create. Mandatory', required=True)
+    parser.add_argument('--destroy', help='destroy txt', action='store_true')
 
     return parser.parse_args()
 
@@ -60,9 +64,9 @@ class Iblox(object):
     """manage infoblox entries"""
     config = ConfigParser.RawConfigParser()
 
-    def __init__(self, record, alias):
+    def __init__(self, record, txt):
         self.record = record
-        self.alias = alias
+        self.txt = txt
         self.config.readfp(open(IBLOX_CONF))
         self.opts = {
             'host': self.config.get('iblox', 'iblox_server'),
@@ -71,62 +75,62 @@ class Iblox(object):
             }
         self.conn = connector.Connector(self.opts)
 
-    def query_alias(self):
+    def query_txt(self):
         """ query for CNAME record: return None if it does not exist or
-            if self.alias matches the existing one """
+            if self.txt matches the existing one """
         try:
-            alias_rec = self.conn.get_object('record:cname', {'name': self.alias})[0]
+            txt_rec = self.conn.get_object('record:txt', {'name': self.txt})[0]
         except TypeError:
             return None
         else:
-            if self.record == str(alias_rec['canonical']):
+            if self.record == str(txt_rec['canonical']):
                 return 'already_there'
             else:
-                return alias_rec
+                return txt_rec
 
     def destroy(self):
         """ clean up CNAME entry """
         try:
             self.conn.delete_object(self.conn.get_object(
-                'record:cname', {'name': self.alias})[0]['_ref'])
+                'record:cname', {'name': self.txt})[0]['_ref'])
         except TypeError:
-            print "cound not find CNAME {}".format(self.alias)
+            print "cound not find CNAME {}".format(self.txt)
         else:
-            print "destroyed CNAME {}".format(self.alias)
+            print "destroyed CNAME {}".format(self.txt)
 
     def destroy_conditional(self):
         """ clean up host entries """
-        alias_entry = self.query_alias()
-        if alias_entry and alias_entry != 'already_there':
-            self.conn.delete_object(alias_entry['_ref'])
-            print "destroyed CNAME record {}".format(self.alias)
+        txt_entry = self.query_txt()
+        if txt_entry and txt_entry != 'already_there':
+            self.conn.delete_object(txt_entry['_ref'])
+            print "destroyed CNAME record {}".format(self.txt_entry)
             return 'did something'
-        elif alias_entry == 'already_there':
+        elif txt_entry == 'already_there':
             return 'already_there'
         else:
             return None
 
     def rebuild(self):
-        """ - destroy alias record (if it is not matching)
-            - create a new alias record if there isn't one already
+        """ - destroy txt record (if it is not matching)
+            - create a new txt record if there isn't one already
         """
 
         try_destroy = self.destroy_conditional()
 
         if try_destroy == 'already_there':
-            print "A CNAME {} associated to {} is already there".format(
-                self.alias, self.record)
+            print "A TXT {} associated to {} is already there".format(
+                self.txt, self.record)
         else:
             try:
-                objects.CNAMERecord.create(self.conn, view='External',
-                                           name=self.alias, canonical=self.record)
+                objects.InfobloxObject.create(self.conn, view='External',
+                                              name=self.record, text=self.txt)
             except Exception as err:
-                print "couldn't create CNAME {} to Record {}: {}".format(
-                    self.alias, self.record, err)
+                print "couldn't create TXT record \"{}\" associated to {}: {}".format(
+                    self.txt, self.record, err)
                 os.sys.exit(1)
             else:
-                print "created CNAME record {} associated to {}".format(
-                    self.alias, self.record)
+                print "created TXT record {} associated to {}".format(
+                    self.txt, self.record)
 
         print '-'*74
 
@@ -157,17 +161,8 @@ if __name__ == '__main__':
             HOST = 'blah'
 
     if ARGS.destroy:
-        Iblox(HOST, ARGS.alias).destroy()
+        Iblox(HOST, ARGS.txt).destroy()
     else:
-        ALIAS_LIST = ARGS.alias.split('.')
-        del ALIAS_LIST[0]
-        HOST_LIST = HOST.split('.')
-        del HOST_LIST[0]
-        if HOST_LIST != ALIAS_LIST:
-            print "host and alias must have the same domain"
-            print "Example: iblox.py --alias foo.bar.com --host prod-foo01.bar.com"
-            print "giving up..."
-            os.sys.exit(1)
-        Iblox(HOST, ARGS.alias).rebuild()
+        Iblox(HOST, ARGS.txt).rebuild()
 
     os.sys.exit()
