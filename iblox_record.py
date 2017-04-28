@@ -10,6 +10,7 @@ import os
 import argparse
 import textwrap
 import platform
+import ipaddress
 import ConfigParser
 from infoblox_client import connector
 from infoblox_client import objects
@@ -90,7 +91,7 @@ class Iblox(object):
 
     def query_a(self):
         """ query for A record: return None if it does not exist or
-            if self.ipv4 matches the existing one """
+            already_there if self.ipv4 matches the existing one """
         try:
             a_rec = self.conn.get_object('record:a', {'name': self.record})[0]
         except TypeError:
@@ -103,7 +104,7 @@ class Iblox(object):
 
     def query_aaaa(self):
         """ query for AAAA record: return None if it does not exist or
-            if self.ipv6 matches the existing one """
+            already_there if self.ipv6 matches the existing one """
         try:
             aaaa_rec = self.conn.get_object('record:aaaa', {'name': self.record})[0]
         except TypeError:
@@ -116,7 +117,7 @@ class Iblox(object):
 
     def query_ptr4(self):
         """ query for PTR4 record: return None if it does not exist or
-            if self.ptr matches the existing one """
+            already_there if self.ptr matches the existing one """
         reverse_ipv4 = "{}.in-addr.arpa".format(('.').join(list(reversed(self.ipv4.split('.')))))
         try:
             ptr4_rec = self.conn.get_object('record:ptr', {'name': reverse_ipv4})[0]
@@ -127,6 +128,21 @@ class Iblox(object):
                 return 'already_there'
             else:
                 return ptr4_rec
+
+    def query_ptr6(self):
+        """ query for PTR4 record: return None if it does not exist or
+            already_there if self.ptr matches the existing one """
+        ucode_ipv6 = self.ipv6.decode('utf-8')
+        reverse_ipv6 = str(ipaddress.ip_address(ucode_ipv6).reverse_pointer)
+        try:
+            ptr6_rec = self.conn.get_object('record:ptr', {'name': reverse_ipv6})[0]
+        except TypeError:
+            return None
+        else:
+            if self.record == str(ptr6_rec['ptrdname']):
+                return 'already_there'
+            else:
+                return ptr6_rec
 
 
     def destroy(self):
