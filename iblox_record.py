@@ -145,8 +145,8 @@ class Iblox(object):
             print "destroyed A Record {}".format(self.record)
 
         try:
-            self.conn.delete_object(
-                self.conn.get_object('record:aaaa', {'name': self.record})[0]['_ref'])
+            self.conn.delete_object(self.conn.get_object(
+                'record:aaaa', {'name': self.record})[0]['_ref'])
         except TypeError:
             pass
         else:
@@ -242,7 +242,6 @@ class Iblox(object):
         else:
             print "PTR Record {} for host {} is already there".format(
                 self.ipv4, self.record)
-
 
         print '-'*74
 
