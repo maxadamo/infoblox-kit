@@ -1,4 +1,4 @@
-#!/usr/bin/python
+os.sys.exit(1)#!/usr/bin/python
 #
 """
   esoteric requirements:
@@ -10,8 +10,8 @@ import os
 import argparse
 import textwrap
 import platform
-import ipaddress
 import ConfigParser
+import ipaddress
 from infoblox_client import connector
 from infoblox_client import objects
 import requests
@@ -57,11 +57,6 @@ def parse():
     parser.add_argument('--destroy', help='destroy record', action='store_true')
 
     return parser.parse_args()
-
-
-def byebye(status=0):
-    """ say good bye """
-    os.sys.exit(status)
 
 
 class Iblox(object):
@@ -209,6 +204,7 @@ class Iblox(object):
         a_entry = self.query_a()
         aaaa_entry = self.query_aaaa()
         ptr4_entry = self.query_ptr4()
+        ptr6_entry = self.query_ptr6()
 
         if a_entry != 'already_there':
             try:
@@ -218,30 +214,13 @@ class Iblox(object):
             except Exception as err:
                 print "couldn't create A Record for {} with IP {}: {}".format(
                     self.record, self.ipv4, err)
-                byebye(1)
+                os.sys.exit(1)
             else:
                 print "created A Record {} with IP {}".format(
                     self.record, self.ipv4)
         else:
             print "A Record {} with IPv4 {} is already there".format(
                 self.record, self.ipv4)
-
-        if not self.ipv6:
-            print "skipping AAAA Record"
-        else:
-            if aaaa_entry != 'already_there':
-                try:
-                    objects.AAAARecord.create(self.conn, view='External',
-                                              name=self.record, ip=self.ipv6)
-                except Exception as err:
-                    print "couldn't create AAAA Record {} with IPv6 {}: {}".format(
-                        self.record, self.ipv6, err)
-                    byebye(1)
-                else:
-                    print "created AAAA Record {} with IP {}".format(
-                        self.record, self.ipv6)
-            else:
-                print "AAAA Record {} with IPv6 {} is already there".format(self.record, self.ipv6)
 
         if ptr4_entry != 'already_there':
             try:
@@ -251,13 +230,47 @@ class Iblox(object):
             except Exception as err:
                 print "couldn't create PTR Record {} for host {}: {}".format(
                     self.ipv4, self.record, err)
-                byebye(1)
+                os.sys.exit(1)
             else:
                 print "created PTR Record {} for host {}".format(
                     self.ipv4, self.record)
         else:
             print "PTR Record {} for host {} is already there".format(
                 self.ipv4, self.record)
+
+        if not self.ipv6:
+            print "skipping AAAA Record"
+            print "skipping PRT v6 Record"
+        else:
+            if aaaa_entry != 'already_there':
+                try:
+                    objects.AAAARecord.create(self.conn, view='External',
+                                              name=self.record, ip=self.ipv6)
+                except Exception as err:
+                    print "couldn't create AAAA Record {} with IPv6 {}: {}".format(
+                        self.record, self.ipv6, err)
+                    os.sys.exit(1)
+                else:
+                    print "created AAAA Record {} with IP {}".format(
+                        self.record, self.ipv6)
+            else:
+                print "AAAA Record {} with IPv6 {} is already there".format(self.record, self.ipv6)
+
+        if ptr6_entry != 'already_there':
+            try:
+                objects.PtrRecordV6.create(self.conn, view='External',
+                                           update_if_exists=True, ip=self.ipv6,
+                                           ptrdname=self.record)
+            except Exception as err:
+                print "couldn't create PTR v6 Record {} for host {}: {}".format(
+                    self.ipv6, self.record, err)
+                os.sys.exit(1)
+            else:
+                print "created PTR v6 Record {} for host {}".format(
+                    self.ipv6, self.record)
+        else:
+            print "PTR v6 Record {} for host {} is already there".format(
+                self.ipv6, self.record)
 
         print '-'*74
 
@@ -272,7 +285,7 @@ if __name__ == '__main__':
         CONF_FILE.close()
         print "\nThe following file has been created: {0}\n".format(IBLOX_CONF)
         print "Fill it with proper values and run the script again\n"
-        byebye(1)
+        os.sys.exit(1)
 
     ARGS = parse()
 
@@ -300,4 +313,4 @@ if __name__ == '__main__':
         else:
             Iblox(ARGS.host, IPV4).rebuild()
 
-    byebye()
+    os.sys.exit()
