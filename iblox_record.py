@@ -1,10 +1,8 @@
-os.sys.exit(1)#!/usr/bin/python
+#!/usr/bin/python
 #
 """
   esoteric requirements:
     - infoblox-client (installable through pip)
-  TODO:
-    - add External/Internal view for Infoblox (now we've hardcoded External)
 """
 import os
 import argparse
@@ -18,8 +16,7 @@ import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
 
-OS = platform.system()
-if OS == 'Windows':
+if platform.system() == 'Windows':
     IBLOX_CONF = os.path.join(os.path.expanduser('~'), 'iblox.cfg')
 else:
     IBLOX_CONF = os.path.join(os.environ['HOME'], '.ibloxrc')
@@ -47,13 +44,15 @@ def parse():
          """
     parser = argparse.ArgumentParser(
         formatter_class=lambda prog:
-        argparse.RawDescriptionHelpFormatter(prog, max_help_position=29),
+        argparse.RawDescriptionHelpFormatter(prog, max_help_position=33),
         description=textwrap.dedent(intro),
         epilog="Author: Massimiliano Adamo <massimiliano.adamo@geant.org>")
 
     parser.add_argument('--host', help='host name', required=True)
+    parser.add_argument('--network', help='network Internal/External',
+                        choices=['External', 'Internal'], required=True)
     parser.add_argument('--ipv6', help='IPv6, optional', required=False)
-    parser.add_argument('--ipv4', help='IPv4, mandatory when you create a record', required=False)
+    parser.add_argument('--ipv4', help='IPv4, mandatory when creating a record', required=False)
     parser.add_argument('--destroy', help='destroy record', action='store_true')
 
     return parser.parse_args()
@@ -63,7 +62,8 @@ class Iblox(object):
     """manage infoblox entries"""
     config = ConfigParser.RawConfigParser()
 
-    def __init__(self, record, ipv4, ipv6=None):
+    def __init__(self, network, record, ipv4, ipv6=None):
+        self.network = network
         self.record = record
         self.ipv4 = ipv4
         self.ipv6 = ipv6
@@ -110,35 +110,11 @@ class Iblox(object):
             else:
                 return aaaa_rec
 
-    def query_ptr4(self):
-        """ query for PTR4 record: return None if it does not exist or
-            already_there if self.ptr matches the existing one """
-        reverse_ipv4 = "{}.in-addr.arpa".format(('.').join(list(reversed(self.ipv4.split('.')))))
-        try:
-            ptr4_rec = self.conn.get_object('record:ptr', {'name': reverse_ipv4})[0]
-        except TypeError:
-            return None
-        else:
-            if self.record == str(ptr4_rec['ptrdname']):
-                return 'already_there'
-            else:
-                return ptr4_rec
-
-    def query_ptr6(self):
-        """ query for PTR4 record: return None if it does not exist or
-            already_there if self.ptr matches the existing one """
-        ucode_ipv6 = self.ipv6.decode('utf-8')
-        reverse_ipv6 = str(ipaddress.ip_address(ucode_ipv6).reverse_pointer)
-        try:
-            ptr6_rec = self.conn.get_object('record:ptr', {'name': reverse_ipv6})[0]
-        except TypeError:
-            return None
-        else:
-            if self.record == str(ptr6_rec['ptrdname']):
-                return 'already_there'
-            else:
-                return ptr6_rec
-
+    def query_ptr46(self):
+        """ query for PTR4 and PTR6 records and return generator """
+        ptr_46 = self.conn.get_object('record:ptr', {'ptrdname': self.record})
+        for ptr in ptr_46:
+            yield ptr
 
     def destroy(self):
         """ clean up host entries """
@@ -164,20 +140,33 @@ class Iblox(object):
             print "destroyed AAAA Record {}".format(self.record)
 
         try:
-            self.conn.delete_object(self.conn.get_object(
-                'record:ptr', {'ptrdname': self.record})[0]['_ref'])
+            ptr46 = list(self.query_ptr46())
         except TypeError:
             pass
         else:
-            print "destroyed PTR Record for {}".format(self.record)
-
+            for ptr in ptr46:
+                ptr_rec = str(ptr['_ref']).split(':')[-1].split('/')[0]
+                try:
+                    self.conn.delete_object(ptr['_ref'])
+                except TypeError:
+                    pass
+                else:
+                    print "destroyed PTR Record {} for {}".format(ptr_rec, self.record)
 
     def destroy_conditional(self):
         """ clean up host entries """
         host_entry = self.query_host()
         a_entry = self.query_a()
         aaaa_entry = self.query_aaaa()
-        ptr4_entry = self.query_ptr4()
+        ucode_ipv4 = self.ipv4.decode('utf-8')
+        rev_ipv4 = str(ipaddress.ip_address(ucode_ipv4).reverse_pointer)
+        if self.ipv6:
+            ucode_ipv6 = self.ipv6.decode('utf-8')
+            rev_ipv6 = str(ipaddress.ip_address(ucode_ipv6).reverse_pointer)
+        try:
+            ptr46_entry = list(self.query_ptr46())
+        except TypeError:
+            ptr46_entry = []
 
         if host_entry:
             self.conn.delete_object(host_entry['_ref'])
@@ -190,9 +179,11 @@ class Iblox(object):
             self.conn.delete_object(aaaa_entry['_ref'])
             print "destroyed AAAA record {} with IPv6 {}".format(
                 self.record, self.ipv6)
-        if ptr4_entry and ptr4_entry != 'already_there':
-            self.conn.delete_object(ptr4_entry['_ref'])
-            print "destroyed PTR record {}".format(self.ipv4)
+        for ptr in ptr46_entry:
+            ptr_rec = str(ptr['_ref']).split(':')[-1].split('/')[0]
+            if ptr_rec != rev_ipv4 or ptr_rec != rev_ipv6:
+                self.conn.delete_object(ptr['_ref'])
+                print "destroyed PTR record {}".format(self.ipv4)
 
     def rebuild(self):
         """ - destroy host record (always)
@@ -203,12 +194,10 @@ class Iblox(object):
         self.destroy_conditional()
         a_entry = self.query_a()
         aaaa_entry = self.query_aaaa()
-        ptr4_entry = self.query_ptr4()
-        ptr6_entry = self.query_ptr6()
 
         if a_entry != 'already_there':
             try:
-                objects.ARecord.create(self.conn, view='External',
+                objects.ARecord.create(self.conn, view=self.network,
                                        update_if_exists=True,
                                        name=self.record, ip=self.ipv4)
             except Exception as err:
@@ -222,29 +211,10 @@ class Iblox(object):
             print "A Record {} with IPv4 {} is already there".format(
                 self.record, self.ipv4)
 
-        if ptr4_entry != 'already_there':
-            try:
-                objects.PtrRecordV4.create(self.conn, view='External',
-                                           update_if_exists=True, ip=self.ipv4,
-                                           ptrdname=self.record)
-            except Exception as err:
-                print "couldn't create PTR Record {} for host {}: {}".format(
-                    self.ipv4, self.record, err)
-                os.sys.exit(1)
-            else:
-                print "created PTR Record {} for host {}".format(
-                    self.ipv4, self.record)
-        else:
-            print "PTR Record {} for host {} is already there".format(
-                self.ipv4, self.record)
-
-        if not self.ipv6:
-            print "skipping AAAA Record"
-            print "skipping PRT v6 Record"
-        else:
+        if self.ipv6:
             if aaaa_entry != 'already_there':
                 try:
-                    objects.AAAARecord.create(self.conn, view='External',
+                    objects.AAAARecord.create(self.conn, view=self.network,
                                               name=self.record, ip=self.ipv6)
                 except Exception as err:
                     print "couldn't create AAAA Record {} with IPv6 {}: {}".format(
@@ -254,11 +224,11 @@ class Iblox(object):
                     print "created AAAA Record {} with IP {}".format(
                         self.record, self.ipv6)
             else:
-                print "AAAA Record {} with IPv6 {} is already there".format(self.record, self.ipv6)
+                print "AAAA Record {} with IPv6 {} is already there".format(
+                    self.record, self.ipv6)
 
-        if ptr6_entry != 'already_there':
             try:
-                objects.PtrRecordV6.create(self.conn, view='External',
+                objects.PtrRecordV6.create(self.conn, view=self.network,
                                            update_if_exists=True, ip=self.ipv6,
                                            ptrdname=self.record)
             except Exception as err:
@@ -266,11 +236,22 @@ class Iblox(object):
                     self.ipv6, self.record, err)
                 os.sys.exit(1)
             else:
-                print "created PTR v6 Record {} for host {}".format(
+                print "created/updated PTR v6 Record {} for host {}".format(
                     self.ipv6, self.record)
         else:
-            print "PTR v6 Record {} for host {} is already there".format(
-                self.ipv6, self.record)
+            print "skipping AAAA Record\nskipping PRT v6 Record"
+
+        try:
+            objects.PtrRecordV4.create(self.conn, view=self.network,
+                                       update_if_exists=True, ip=self.ipv4,
+                                       ptrdname=self.record)
+        except Exception as err:
+            print "couldn't create PTR Record {} for host {}: {}".format(
+                self.ipv4, self.record, err)
+            os.sys.exit(1)
+        else:
+            print "created/updated PTR Record {} for host {}".format(
+                self.ipv4, self.record)
 
         print '-'*74
 
@@ -302,15 +283,7 @@ if __name__ == '__main__':
         else:
             IPV4 = ARGS.ipv4
 
-    if ARGS.ipv6:
-        if ARGS.destroy:
-            Iblox(ARGS.host, IPV4, ARGS.ipv6).destroy()
-        else:
-            Iblox(ARGS.host, IPV4, ARGS.ipv6).rebuild()
+    if ARGS.destroy:
+        Iblox(ARGS.network, ARGS.host, IPV4, ARGS.ipv6).destroy()
     else:
-        if ARGS.destroy:
-            Iblox(ARGS.host, IPV4).destroy()
-        else:
-            Iblox(ARGS.host, IPV4).rebuild()
-
-    os.sys.exit()
+        Iblox(ARGS.network, ARGS.host, IPV4, ARGS.ipv6).rebuild()

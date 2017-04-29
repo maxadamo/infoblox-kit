@@ -51,6 +51,8 @@ def parse():
 
     parser.add_argument('--host', help='existing host name. Mandatory when creating an alias')
     parser.add_argument('--alias', help='alias to create. Mandatory', required=True)
+    parser.add_argument('--network', help='network Internal/External',
+                        choices=['External', 'Internal'], required=True)
     parser.add_argument('--destroy', help='destroy alias', action='store_true')
 
     return parser.parse_args()
@@ -60,7 +62,8 @@ class Iblox(object):
     """manage infoblox entries"""
     config = ConfigParser.RawConfigParser()
 
-    def __init__(self, record, alias):
+    def __init__(self, network, record, alias):
+        self.network = network
         self.record = record
         self.alias = alias
         self.config.readfp(open(IBLOX_CONF))
@@ -118,7 +121,7 @@ class Iblox(object):
                 self.alias, self.record)
         else:
             try:
-                objects.CNAMERecord.create(self.conn, view='External',
+                objects.CNAMERecord.create(self.conn, view=self.network,
                                            name=self.alias, canonical=self.record)
             except Exception as err:
                 print "couldn't create CNAME {} to Record {}: {}".format(
@@ -164,10 +167,8 @@ if __name__ == '__main__':
         HOST_LIST = HOST.split('.')
         del HOST_LIST[0]
         if HOST_LIST != ALIAS_LIST:
-            print "host and alias must have the same domain"
+            print "host and alias must be in the same domain"
             print "Example: iblox.py --alias foo.bar.com --host prod-foo01.bar.com"
             print "giving up..."
             os.sys.exit(1)
         Iblox(HOST, ARGS.alias).rebuild()
-
-    os.sys.exit()

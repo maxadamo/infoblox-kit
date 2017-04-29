@@ -1,11 +1,9 @@
 #!/usr/bin/python
 #
 """
-  NOTE: THIS IS STILL BROKEN
+  THIS SCRIPT IS A BROKEN PLACE-HOLDER
   esoteric requirements:
     - infoblox-client (installable through pip)
-  TODO:
-    - add External/Internal view for Infoblox (now we've hardcoded External)
 """
 import os
 import argparse
@@ -55,6 +53,8 @@ def parse():
 
     parser.add_argument('--host', help='existing host name. Mandatory when creating a txt')
     parser.add_argument('--txt', help='txt to create. Mandatory', required=True)
+    parser.add_argument('--network', help='network Internal/External',
+                        choices=['External', 'Internal'], required=True)
     parser.add_argument('--destroy', help='destroy txt', action='store_true')
 
     return parser.parse_args()
@@ -64,7 +64,8 @@ class Iblox(object):
     """manage infoblox entries"""
     config = ConfigParser.RawConfigParser()
 
-    def __init__(self, record, txt):
+    def __init__(self, network, record, txt):
+        self.network = network
         self.record = record
         self.txt = txt
         self.config.readfp(open(IBLOX_CONF))
@@ -122,7 +123,7 @@ class Iblox(object):
                 self.txt, self.record)
         else:
             try:
-                objects.InfobloxObject.create(self.conn, view='External',
+                objects.InfobloxObject.create(self.conn, view=self.network,
                                               name=self.record, text=self.txt)
             except Exception as err:
                 print "couldn't create TXT record \"{}\" associated to {}: {}".format(
