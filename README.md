@@ -8,4 +8,4 @@ Use the scripts with `-h/--help` (`iblox.py --help`) to see all available option
 
 ## TODO
 
-- IPv6 PTR
+- Fix TXT creation. API is missing this feature. 
