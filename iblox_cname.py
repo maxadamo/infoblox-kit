@@ -38,8 +38,8 @@ def parse():
     intro = """\
         With this script you can add/replace/destroy a CNAME record on Infoblox
         -----------------------------------------------------------------------
-        Adding: iblox.py --host test-foo01.bar.com --alias foo.bar.com
-        Removing: iblox.py --alias foo.bar.com --destroy
+        Adding: iblox_cname.py --host test-foo01.bar.com --alias foo.bar.com
+        Removing: iblox_cname.py --alias foo.bar.com --destroy
         Hint: If you add an alias, you will implicitly replace any existing entry which is
               different from the one provided to the script
          """

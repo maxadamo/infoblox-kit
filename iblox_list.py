@@ -58,29 +58,34 @@ def span_ipv4(start=96):
             pre_ip_items = sorted(list(ip_generator))
         except TypeError:
             pre_ip_items = []
-            print "first IP within {}0: WHOLE NETWORK".format(net_scope)
+            os.sys.stdout.write("Free IPs WITHIN {}0 => WHOLE NETWORK".format(net_scope))
         else:
-            os.sys.stdout.write("first IP within {}0: ".format(net_scope))
+            os.sys.stdout.write("Free IPs within {}0 => ".format(net_scope))
 
         # removing possible duplicates and weird records that I have seen
         for i in pre_ip_items:
             if i not in ip_items and i != 0:
                 ip_items.append(i)
 
+        free_ip = []
         for octet in ip_items:
             index_number = ip_items.index(octet) + 1
             if index_number != octet:
-                print "found {}{}".format(net_scope, index_number)
-                break
+                free_ip.append("{}{}".format(net_scope, index_number))
+                # os.sys.stdout.write("{}{}, ".format(net_scope, index_number))
+                # break
+        joined_free_ip = ", ".join(free_ip)
+        print "{}\n".format(joined_free_ip)
         start += 1
+
 
 if __name__ == '__main__':
     requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
-    print "searching first IP v4 available on each network from 62.40.96.1 to 62.40.127.254"
+    print "searching free IPs v4 available on each network from 62.40.96.1 to 62.40.127.254"
     print '-'*80
 
     span_ipv4()
 
-    print "searching first IP v6 available on each network from 62.40.96.1 to 62.40.127.254"
+    print "\nsearching free IPs v6 available on each network from 62.40.96.1 to 62.40.127.254"
     print '-'*80
