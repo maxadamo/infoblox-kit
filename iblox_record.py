@@ -181,9 +181,9 @@ class Iblox(object):
                 self.record, self.ipv6)
         for ptr in ptr46_entry:
             ptr_rec = str(ptr['_ref']).split(':')[-1].split('/')[0]
-            if ptr_rec != rev_ipv4 or ptr_rec != rev_ipv6:
+            if ptr_rec != rev_ipv4 and ptr_rec != rev_ipv6:
                 self.conn.delete_object(ptr['_ref'])
-                print "destroyed PTR record {}".format(self.ipv4)
+                print "destroyed PTR record {} for {}".format(ptr_rec, self.record)
 
     def rebuild(self):
         """ - destroy host record (always)
