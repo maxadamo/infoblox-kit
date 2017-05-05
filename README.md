@@ -1,3 +1,9 @@
+# This project is not maintained any longer! 
+
+## please use the new tool: [terraformware](https://github.com/maxadamo/terraformware)
+
+
+
 # infoblox survival kit
 
 - `iblox_record.py` allows to create/modify/delete an A and AAAA records
